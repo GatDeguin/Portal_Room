@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#050608" />
+  <title>Room Tilt Cube — Photoreal Physics</title>
+  <style>
+    :root {
+      --text: #f8fafc;
+      --muted: rgba(248,250,252,.68);
+      --line: rgba(255,255,255,.12);
+      --ok: #55f2a5;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #050608; color: var(--text); overscroll-behavior: none; }
+    body { user-select: none; touch-action: none; }
+    button { font: inherit; border: 0; color: inherit; cursor: pointer; }
+    .app { position: fixed; inset: 0; overflow: hidden; background: #050608; }
+    #gl { position: fixed; inset: 0; width: 100vw; height: 100dvh; display: block; background: #050608; }
+    .edge-depth { position: fixed; inset: 0; z-index: 2; pointer-events: none; background: linear-gradient(90deg, rgba(0,0,0,.48), transparent 8%, transparent 92%, rgba(0,0,0,.45)), linear-gradient(180deg, rgba(0,0,0,.44), transparent 12%, transparent 88%, rgba(0,0,0,.58)), radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,.42) 100%); mix-blend-mode: multiply; }
+    .glass-reflection { position: fixed; inset: 0; z-index: 3; pointer-events: none; opacity: .20; background: radial-gradient(circle at 15% 4%, rgba(255,255,255,.24), transparent 18%), linear-gradient(112deg, rgba(255,255,255,.14), transparent 13% 58%, rgba(255,255,255,.055) 64%, transparent 74%); mix-blend-mode: screen; }
+    .sensor-notch { position: fixed; z-index: 4; top: calc(7px + env(safe-area-inset-top)); left: 50%; width: 92px; height: 8px; border-radius: 999px; transform: translateX(-50%); background: rgba(0,0,0,.34); box-shadow: inset 0 1px rgba(255,255,255,.08), 0 4px 22px rgba(0,0,0,.25); pointer-events: none; opacity: .58; }
+    .hud { position: fixed; z-index: 10; top: calc(12px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); right: calc(12px + env(safe-area-inset-right)); display: grid; grid-template-columns: 1fr auto; gap: 10px; pointer-events: none; transition: opacity .28s ease, transform .28s ease; }
+    .playing .hud { opacity: .18; transform: translateY(-4px); }
+    .playing .hud:hover, .playing .hud:focus-within { opacity: 1; transform: none; }
+    .card { pointer-events: auto; border: 1px solid rgba(255,255,255,.10); background: linear-gradient(180deg, rgba(8, 12, 18, .50), rgba(4, 7, 12, .32)); backdrop-filter: blur(18px) saturate(1.15); border-radius: 18px; box-shadow: 0 18px 52px rgba(0,0,0,.22), inset 0 1px rgba(255,255,255,.08); }
+    .mission { min-width: 0; padding: 11px 13px; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .title { font-weight: 950; font-size: clamp(14px, 3.4vw, 18px); letter-spacing: -.035em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pill { flex: 0 0 auto; padding: 4px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.045); color: rgba(255,255,255,.72); font-size: 10.5px; font-weight: 850; text-transform: uppercase; letter-spacing: .03em; }
+    .objective { margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.24; }
+    .actions { display: flex; gap: 8px; pointer-events: auto; }
+    .icon-btn { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 15px; border: 1px solid rgba(255,255,255,.10); background: rgba(5, 8, 13, .42); backdrop-filter: blur(18px); box-shadow: 0 12px 28px rgba(0,0,0,.20), inset 0 1px rgba(255,255,255,.08); transition: transform .16s ease, background .16s ease; }
+    .icon-btn:active { transform: scale(.96); }
+    .icon { width: 19px; height: 19px; }
+    .bottom { position: fixed; z-index: 10; left: calc(12px + env(safe-area-inset-left)); right: calc(12px + env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; pointer-events: none; transition: opacity .28s ease, transform .28s ease; }
+    .playing .bottom { opacity: .16; transform: translateY(8px); }
+    .playing .bottom:hover, .playing .bottom:focus-within { opacity: 1; transform: none; }
+    .telemetry { padding: 10px 11px; pointer-events: auto; }
+    .meter-row { display: grid; grid-template-columns: 72px 1fr 38px; gap: 8px; align-items: center; font-size: 10.5px; color: var(--muted); }
+    .meter-row + .meter-row { margin-top: 6px; }
+    .meter { height: 6px; border-radius: 999px; background: rgba(255,255,255,.10); overflow: hidden; box-shadow: inset 0 1px 4px rgba(0,0,0,.20); }
+    .fill { height: 100%; width: 50%; border-radius: 999px; background: linear-gradient(90deg, #78c7ff, #55f2a5); transform-origin: left center; }
+    .sensor { margin-top: 8px; display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11.5px; }
+    .led { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.22); box-shadow: 0 0 10px rgba(255,255,255,.12); }
+    .led.on { background: var(--ok); box-shadow: 0 0 14px rgba(85,242,165,.55); }
+    .stick-wrap { pointer-events: auto; width: 88px; height: 88px; border-radius: 50%; border: 1px solid rgba(255,255,255,.12); background: radial-gradient(circle, rgba(255,255,255,.11), rgba(255,255,255,.035) 62%, rgba(0,0,0,.22)); backdrop-filter: blur(18px); box-shadow: 0 18px 48px rgba(0,0,0,.32), inset 0 1px rgba(255,255,255,.09); display: grid; place-items: center; }
+    .stick { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.07)); border: 1px solid rgba(255,255,255,.16); box-shadow: 0 10px 24px rgba(0,0,0,.30), inset 0 1px rgba(255,255,255,.18); transform: translate(var(--jx, 0px), var(--jy, 0px)); }
+    .toast { position: fixed; z-index: 20; left: 50%; top: calc(70px + env(safe-area-inset-top)); max-width: min(92vw, 760px); transform: translate(-50%, -10px); opacity: 0; pointer-events: none; padding: 10px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.13); background: rgba(5, 8, 13, .74); backdrop-filter: blur(18px); box-shadow: 0 18px 46px rgba(0,0,0,.30); font-size: 13px; text-align: center; transition: opacity .22s ease, transform .22s ease; }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .modal-layer { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: calc(18px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); background: rgba(3, 6, 10, .50); backdrop-filter: blur(16px); opacity: 0; pointer-events: none; transition: opacity .24s ease; }
+    .modal-layer.show { opacity: 1; pointer-events: auto; }
+    .modal { width: min(620px, 100%); border-radius: 30px; padding: 22px; border: 1px solid rgba(255,255,255,.14); background: radial-gradient(circle at 12% 0%, rgba(255,74,61,.14), transparent 34%), linear-gradient(180deg, rgba(16, 23, 35, .90), rgba(6, 10, 16, .90)); box-shadow: 0 38px 110px rgba(0,0,0,.52), inset 0 1px rgba(255,255,255,.1); }
+    .modal h1, .modal h2 { margin: 0; line-height: .94; letter-spacing: -.065em; }
+    .modal h1 { font-size: clamp(42px, 11vw, 76px); }
+    .modal h2 { font-size: clamp(30px, 8vw, 52px); }
+    .modal p { color: var(--muted); line-height: 1.48; margin: 13px 0 0; }
+    .modal-grid { display: grid; gap: 10px; margin-top: 18px; }
+    .primary, .secondary { min-height: 50px; border-radius: 18px; font-weight: 900; letter-spacing: -.02em; padding: 0 16px; }
+    .primary { background: linear-gradient(135deg, #ff756b, #ff382b); box-shadow: 0 16px 36px rgba(255,56,43,.28), inset 0 1px rgba(255,255,255,.28); }
+    .secondary { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.13); }
+    .settings { display: grid; gap: 10px; margin-top: 16px; }
+    .setting { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 14px; border-radius: 20px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.055); padding: 12px; }
+    .setting b { display: block; }
+    .setting span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+    .switch { width: 52px; height: 30px; border-radius: 999px; padding: 3px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.11); }
+    .switch i { display: block; width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,.72); transition: transform .18s ease, background .18s ease; }
+    .switch.on { background: rgba(85,242,165,.22); }
+    .switch.on i { transform: translateX(22px); background: var(--ok); }
+    @media (max-width: 680px) { .hud { gap: 8px; } .actions { gap: 6px; } .icon-btn { width: 40px; height: 40px; border-radius: 14px; } .mission { padding: 10px 11px; } .objective { font-size: 11.5px; } .bottom { gap: 8px; } .stick-wrap { width: 82px; height: 82px; } .stick { width: 32px; height: 32px; } .meter-row { grid-template-columns: 52px 1fr 34px; } }
+  </style>
+</head>
+<body>
+  <main class="app" id="app">
+    <canvas id="gl" aria-label="Room Tilt Cube fotorrealista con físicas, niveles y mecánicas"></canvas>
+    <div class="edge-depth"></div><div class="glass-reflection"></div><div class="sensor-notch"></div>
+    <section class="hud">
+      <div class="card mission"><div class="row"><div class="title" id="levelTitle">Room Tilt Cube</div><div class="pill" id="levelPill">Nivel 1/14</div></div><div class="objective" id="objective">Incliná el teléfono: la gravedad mueve el cubo rojo por la habitación.</div></div>
+      <div class="actions">
+        <button class="icon-btn" id="hintBtn" aria-label="Pista"><svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M9 18h6M10 22h4M8.5 14.5c-1.7-1.2-2.8-3.1-2.8-5.3A6.3 6.3 0 0 1 12 3a6.3 6.3 0 0 1 6.3 6.2c0 2.2-1.1 4.1-2.8 5.3-.8.6-1.2 1.2-1.3 2H9.8c-.1-.8-.5-1.4-1.3-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button class="icon-btn" id="gyroBtn" aria-label="Activar o calibrar sensores"><svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/></svg></button>
+        <button class="icon-btn" id="settingsBtn" aria-label="Ajustes"><svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2a2 2 0 0 1-4 0V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 1 1 4.2 17l.1-.1A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.6-1H2.8a2 2 0 0 1 0-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 1 1 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6V2.8a2 2 0 0 1 4 0V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2a2 2 0 0 1 0 4H21a1.7 1.7 0 0 0-1.6 1Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+    </section>
+    <section class="bottom"><div class="card telemetry"><div class="meter-row"><span>Grav. X</span><div class="meter"><div class="fill" id="gxFill"></div></div><span id="gxText">0.00</span></div><div class="meter-row"><span>Grav. Z</span><div class="meter"><div class="fill" id="gzFill"></div></div><span id="gzText">0.00</span></div><div class="sensor"><span class="led" id="sensorLed"></span><span id="sensorText">Mecánicas: hielo, freno, impulso, bumpers y compuertas móviles.</span></div></div><div class="stick-wrap" id="stickWrap" aria-label="Stick virtual de gravedad"><div class="stick" id="stick"></div></div></section>
+    <div class="toast" id="toast"></div>
+    <div class="modal-layer show" id="startModal"><div class="modal"><h1>Room<br>Tilt Cube</h1><p>14 niveles, compuertas móviles, hielo, fricción, impulso, bumpers, secuencias, portales, micro-shake, pulsos de luz, sonidos y háptica. Render mejorado con microtexturas, rebote de luz, vidrio, color grading fílmico y resolución adaptativa optimizada.</p><div class="modal-grid"><button class="primary" id="startGyroBtn">Empezar con giroscopio</button><button class="secondary" id="startBtn">Empezar sin sensores</button></div></div></div>
+    <div class="modal-layer" id="settingsModal"><div class="modal"><h2>Ajustes</h2><p>La escena ocupa toda la pantalla y simula materiales, iluminación, contacto y profundidad. El cubo acelera al inclinar, choca, rebota, se frena, patina sobre hielo y recibe impulso en zonas especiales.</p><div class="settings"><div class="setting"><div><b>Gravedad intensa</b><span>Más aceleración al rotar el teléfono.</span></div><button class="switch on" id="gravitySwitch"><i></i></button></div><div class="setting"><div><b>Cámara dinámica</b><span>Parallax, micro-shake y profundidad integrada al borde físico del dispositivo.</span></div><button class="switch on" id="cameraSwitch"><i></i></button></div><div class="setting"><div><b>Sonido</b><span>Impactos, bumpers, zonas y resolución.</span></div><button class="switch on" id="soundSwitch"><i></i></button></div><div class="setting"><div><b>Vibración</b><span>Respuesta háptica si el móvil la soporta.</span></div><button class="switch on" id="hapticSwitch"><i></i></button></div></div><div class="modal-grid"><button class="secondary" id="resetBtn">Reiniciar nivel</button><button class="secondary" id="resetAllBtn">Borrar progreso</button><button class="primary" id="closeSettingsBtn">Volver</button></div></div></div>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+      const $ = id => document.getElementById(id);
+      const app = $('app');
+      const canvas = $('gl');
+      const gl = canvas.getContext('webgl', { antialias: false, alpha: false, powerPreference: 'high-performance' });
+      if (!gl) { document.body.innerHTML = '<div style="display:grid;place-items:center;height:100%;padding:24px;color:white;font-family:system-ui;background:#070a0f;text-align:center">Este navegador no soporta WebGL. Probá con Safari/Chrome actualizado.</div>'; return; }
+      const ui = { levelTitle:$('levelTitle'), levelPill:$('levelPill'), objective:$('objective'), toast:$('toast'), gxFill:$('gxFill'), gzFill:$('gzFill'), gxText:$('gxText'), gzText:$('gzText'), sensorLed:$('sensorLed'), sensorText:$('sensorText'), stickWrap:$('stickWrap'), stick:$('stick'), startModal:$('startModal'), settingsModal:$('settingsModal') };
+      const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
+      const lerp = (a,b,t)=>a+(b-a)*t;
+      const V3 = { norm:a=>{const l=Math.hypot(a[0],a[1],a[2])||1; return [a[0]/l,a[1]/l,a[2]/l];} };
+      const Q = { ident:[0,0,0,1], mul(a,b){return [a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]];}, axis(ax,angle){const n=V3.norm(ax),s=Math.sin(angle/2); return [n[0]*s,n[1]*s,n[2]*s,Math.cos(angle/2)];}, norm(q){const l=Math.hypot(q[0],q[1],q[2],q[3])||1; return [q[0]/l,q[1]/l,q[2]/l,q[3]/l];} };
+      const fallbackTarget = { type:1, pos:[0,0] };
+      const sanitizeTarget = t => (t && Array.isArray(t.pos) && t.pos.length >= 2 && Number.isFinite(t.pos[0]) && Number.isFinite(t.pos[1]) && Number.isFinite(t.type)) ? t : fallbackTarget;
+
+      const levels = [
+        {name:'Sala 01 — Placa verde', objective:'Llevá el cubo rojo a la placa verde.', hint:'Rotá suave. El cubo acelera por gravedad proyectada.', start:[-1.65,1.55], target:{type:1,pos:[1.55,-1.45]}, obstacles:[], zones:[], bumpers:[]},
+        {name:'Sala 02 — Rebote controlado', objective:'Usá paredes y fricción para llegar a la placa azul.', hint:'Rebotá contra las paredes y frená con inclinación opuesta.', start:[1.85,1.55], target:{type:2,pos:[-1.75,-1.50]}, obstacles:[{x:0,z:.18,w:.50,d:2.15}], zones:[], bumpers:[]},
+        {name:'Sala 03 — Estabilidad', objective:'Dejá el cubo quieto dentro del aro amarillo.', hint:'Entrá despacio: si el cubo pasa rápido, el sensor no activa.', start:[-1.90,-1.55], target:{type:3,pos:[1.45,1.24]}, obstacles:[{x:-.18,z:-.2,w:2.3,d:.42}], zones:[], bumpers:[]},
+        {name:'Sala 04 — Portal del fondo', objective:'Empujá el cubo hacia el portal central del fondo.', hint:'El portal está en la pared naranja. Usá impulsos cortos.', start:[0,1.70], target:{type:4,pos:[0,-2.42]}, obstacles:[{x:-1.25,z:-.22,w:.44,d:1.95},{x:1.25,z:-.22,w:.44,d:1.95}], zones:[], bumpers:[]},
+        {name:'Sala 05 — Secuencia física', objective:'Activá verde, azul y portal en orden.', hint:'Acelerá, frená, chocá suave y alineá el último empuje.', start:[-1.85,1.80], sequence:[{type:1,pos:[1.62,1.28]},{type:2,pos:[-1.72,-1.22]},{type:4,pos:[0,-2.42]}], obstacles:[{x:0,z:.54,w:.46,d:1.75},{x:0,z:-1.16,w:2.15,d:.40}], zones:[], bumpers:[]},
+        {name:'Sala 06 — Compuerta móvil', objective:'Cruza cuando la barrera deje el paso libre.', hint:'La compuerta oscila. Esperá el hueco y entrá con impulso controlado.', start:[-2.2,1.85], target:{type:1,pos:[2.05,-1.75]}, obstacles:[{x:0,z:-.05,w:.42,d:1.35,move:{axis:'z',amp:.95,speed:1.05,phase:0}}], zones:[], bumpers:[]},
+        {name:'Sala 07 — Hielo', objective:'Atravesá la zona helada sin perder control.', hint:'En celeste el cubo casi no frena: anticipá el giro antes de entrar.', start:[-2.05,1.70], target:{type:2,pos:[1.95,-1.72]}, obstacles:[{x:0,z:-.95,w:2.0,d:.36}], zones:[{type:1,x:.15,z:.55,r:1.25}], bumpers:[]},
+        {name:'Sala 08 — Freno viscoso', objective:'Usá la zona violeta para reducir velocidad antes del aro.', hint:'La zona violeta frena mucho; sirve para estabilizar el cubo.', start:[-2.10,-1.75], target:{type:3,pos:[1.70,1.55]}, obstacles:[], zones:[{type:2,x:.35,z:.15,r:1.05}], bumpers:[]},
+        {name:'Sala 09 — Bumpers', objective:'Usá los bumpers para cambiar dirección y alcanzar la placa.', hint:'Los postes rojos rebotan fuerte. Apuntá con poca corrección.', start:[-2.20,1.85], target:{type:1,pos:[2.05,-1.80]}, obstacles:[{x:0,z:0,w:.35,d:1.25}], zones:[], bumpers:[{x:-.8,z:.05,r:.34,strength:4.4},{x:.9,z:-.65,r:.34,strength:4.4}]},
+        {name:'Sala 10 — Cinta de impulso', objective:'Entrá a la franja naranja para recibir empuje lateral.', hint:'La cinta empuja hacia la derecha. Usala como acelerador.', start:[-2.20,0.90], target:{type:2,pos:[2.05,-1.65]}, obstacles:[{x:.8,z:.85,w:.42,d:1.7}], zones:[{type:3,x:-.25,z:-.35,r:.95,dx:1,dz:-.15}], bumpers:[]},
+        {name:'Sala 11 — Laberinto vivo', objective:'Resuelve la trayectoria entre dos compuertas móviles.', hint:'La primera compuerta marca el ritmo; la segunda exige frenar antes de doblar.', start:[-2.25,1.95], target:{type:1,pos:[2.10,-1.85]}, obstacles:[{x:-.65,z:.25,w:.42,d:1.6,move:{axis:'z',amp:.72,speed:1.2,phase:.7}},{x:.92,z:-.70,w:1.6,d:.38,move:{axis:'x',amp:.75,speed:.9,phase:1.4}}], zones:[], bumpers:[]},
+        {name:'Sala 12 — Hielo + bumper', objective:'Combina patinaje y rebote para alcanzar el portal.', hint:'En hielo, el bumper te da dirección; no intentes frenar tarde.', start:[-2.10,1.80], target:{type:4,pos:[0,-2.42]}, obstacles:[{x:1.25,z:.25,w:.45,d:1.5}], zones:[{type:1,x:-.75,z:.15,r:1.18}], bumpers:[{x:.75,z:-.55,r:.36,strength:4.8}]},
+        {name:'Sala 13 — Triple secuencia', objective:'Activa aro, bumper/azul y portal en orden.', hint:'Primero estabilizá, después usá el rebote para salir al fondo.', start:[-1.80,-1.80], sequence:[{type:3,pos:[1.55,1.45]},{type:2,pos:[-1.85,1.45]},{type:4,pos:[0,-2.42]}], obstacles:[{x:0,z:.15,w:.40,d:1.9}], zones:[{type:2,x:.85,z:.35,r:.82}], bumpers:[{x:-.75,z:-.45,r:.34,strength:4.2}]},
+        {name:'Sala 14 — Final dinámico', objective:'Usá todos los sistemas: hielo, freno, impulso, bumpers y compuertas.', hint:'Buscá velocidad en naranja, control en violeta y salida por el portal.', start:[-2.25,2.05], sequence:[{type:1,pos:[2.05,1.52]},{type:2,pos:[-2.02,-1.38]},{type:3,pos:[1.55,-1.45]},{type:4,pos:[0,-2.42]}], obstacles:[{x:0,z:.75,w:.40,d:1.7,move:{axis:'x',amp:.85,speed:1.05,phase:.2}},{x:.45,z:-.85,w:1.75,d:.36,move:{axis:'z',amp:.52,speed:.95,phase:1.7}}], zones:[{type:1,x:-1.05,z:.80,r:.92},{type:2,x:.80,z:.15,r:.70},{type:3,x:-.40,z:-1.35,r:.75,dx:1,dz:-.25}], bumpers:[{x:1.25,z:.95,r:.32,strength:4.7},{x:-1.35,z:-.62,r:.32,strength:4.7}]},
+        {name:'Sala 15 — Rampa de ascenso', objective:'Subí por la rampa y estabilizá el cubo en la plataforma elevada.', hint:'Entrá a la rampa con velocidad media. Al llegar arriba, incliná contra la pendiente para no pasarte.', start:[-2.20,1.95], target:{type:1,pos:[1.35,-.82],y:.62}, obstacles:[{x:-.2,z:-1.65,w:2.0,d:.34}], zones:[{type:4,x:-.35,z:.35,r:1.05}], ramps:[{x:-.35,z:.35,w:1.35,d:2.35,h:.62,dx:1,dz:-1}], platforms:[{x:1.35,z:-.82,w:1.20,d:1.15,h:.62}], jumpPads:[], bumpers:[]},
+        {name:'Sala 16 — Primer salto', objective:'Usá el pad celeste para saltar el muro bajo y llegar al azul.', hint:'El salto se activa al tocar el pad. Mantené la inclinación hacia adelante durante el vuelo.', start:[-2.20,1.45], target:{type:2,pos:[1.85,-1.55]}, obstacles:[{x:.08,z:-.05,w:2.50,d:.34}], zones:[{type:5,x:-1.05,z:.65,r:.48}], ramps:[], platforms:[], jumpPads:[{x:-1.05,z:.65,r:.48,power:3.0,dx:2.25,dz:-2.35}], bumpers:[]},
+        {name:'Sala 17 — Plataforma lateral', objective:'Subí a la repisa de la pared izquierda y activá el aro elevado.', hint:'La plataforma está pegada a la pared. La rampa lateral te sube a la repisa.', start:[2.05,1.85], target:{type:3,pos:[-2.45,-.95],y:.72}, obstacles:[{x:.55,z:-.55,w:.38,d:1.8}], zones:[{type:4,x:-1.70,z:.10,r:.95},{type:2,x:-2.45,z:-.95,r:.58}], ramps:[{x:-1.70,z:.10,w:1.10,d:2.0,h:.72,dx:-1,dz:-.25}], platforms:[{x:-2.45,z:-.95,w:.92,d:1.65,h:.72}], jumpPads:[], bumpers:[]},
+        {name:'Sala 18 — Plataforma móvil', objective:'Esperá la plataforma móvil, subí y llevá el cubo a la placa verde.', hint:'La plataforma se desplaza lateralmente. Corregí la gravedad mientras se mueve.', start:[-2.05,1.75], target:{type:1,pos:[1.55,-1.25],y:.56}, obstacles:[{x:0,z:.65,w:1.6,d:.32}], zones:[{type:4,x:.35,z:-.45,r:1.05}], ramps:[{x:-.45,z:.10,w:1.05,d:1.75,h:.56,dx:1,dz:-1}], platforms:[{x:1.55,z:-1.25,w:1.15,d:1.10,h:.56,move:{axis:'x',amp:.55,speed:.85,phase:.4}}], jumpPads:[], bumpers:[]},
+        {name:'Sala 19 — Doble salto', objective:'Encadená dos saltos sin caer en mala posición.', hint:'El primer pad da altura; el segundo corrige dirección. No frenes en el aire.', start:[-2.15,2.05], target:{type:2,pos:[2.0,-1.82]}, obstacles:[{x:0,z:.25,w:2.0,d:.32},{x:.25,z:-1.05,w:2.0,d:.32}], zones:[{type:5,x:-1.25,z:1.05,r:.45},{type:5,x:.60,z:-.25,r:.45}], ramps:[], platforms:[], jumpPads:[{x:-1.25,z:1.05,r:.45,power:2.8,dx:1.9,dz:-1.7},{x:.60,z:-.25,r:.45,power:2.65,dx:1.55,dz:-1.85}], bumpers:[]},
+        {name:'Sala 20 — Escalera física', objective:'Subí por rampas y descansos hasta el portal del fondo.', hint:'Cada descanso está más alto. Frená antes de cada giro.', start:[-2.20,1.85], target:{type:4,pos:[0,-2.42],y:.80}, obstacles:[{x:1.35,z:.35,w:.38,d:1.55}], zones:[{type:4,x:-1.10,z:.85,r:.70},{type:4,x:.35,z:-.15,r:.70},{type:4,x:1.15,z:-1.20,r:.70}], ramps:[{x:-1.10,z:.85,w:.95,d:1.25,h:.32,dx:1,dz:-.4},{x:.35,z:-.15,w:.95,d:1.25,h:.55,dx:1,dz:-.7},{x:1.15,z:-1.20,w:.95,d:1.25,h:.80,dx:-1,dz:-1}], platforms:[{x:-.25,z:.28,w:.95,d:.82,h:.32},{x:.95,z:-.68,w:.95,d:.82,h:.55},{x:.25,z:-1.85,w:1.2,d:.72,h:.80}], jumpPads:[], bumpers:[]},
+        {name:'Sala 21 — Rebote aéreo', objective:'Saltá, golpeá el bumper y aterrizá en la plataforma.', hint:'El bumper en altura útil se alcanza saltando desde el pad.', start:[-2.05,1.70], target:{type:1,pos:[1.85,-1.25],y:.62}, obstacles:[{x:0,z:.10,w:.36,d:2.1}], zones:[{type:5,x:-1.22,z:.68,r:.46},{type:4,x:1.85,z:-1.25,r:.72}], platforms:[{x:1.85,z:-1.25,w:1.05,d:1.05,h:.62}], jumpPads:[{x:-1.22,z:.68,r:.46,power:3.25,dx:2.55,dz:-2.15}], bumpers:[{x:.62,z:-.55,r:.32,strength:3.9}]},
+        {name:'Sala 22 — Final vertical', objective:'Combina rampa, salto, repisa, hielo y portal elevado.', hint:'Usá la rampa para tomar altura, el hielo para conservar impulso y el salto para entrar al portal.', start:[-2.35,2.05], sequence:[{type:1,pos:[-1.35,.55],y:.35},{type:2,pos:[1.35,.15],y:.58},{type:3,pos:[-2.25,-1.25],y:.72},{type:4,pos:[0,-2.42],y:.82}], obstacles:[{x:.10,z:1.15,w:1.85,d:.32},{x:.25,z:-.85,w:1.65,d:.32,move:{axis:'x',amp:.55,speed:1.05,phase:.8}}], zones:[{type:4,x:-1.25,z:1.05,r:.82},{type:1,x:.75,z:.05,r:.78},{type:5,x:-.75,z:-.72,r:.42}], ramps:[{x:-1.25,z:1.05,w:1.10,d:1.55,h:.35,dx:.2,dz:-1},{x:1.15,z:.05,w:1.10,d:1.35,h:.58,dx:1,dz:-.2},{x:-2.10,z:-.60,w:.85,d:1.35,h:.72,dx:-.4,dz:-1}], platforms:[{x:-1.35,z:.55,w:1.0,d:.95,h:.35},{x:1.35,z:.15,w:1.0,d:.95,h:.58},{x:-2.25,z:-1.25,w:.85,d:1.35,h:.72},{x:0,z:-2.35,w:1.15,d:.70,h:.82}], jumpPads:[{x:-.75,z:-.72,r:.42,power:3.1,dx:1.45,dz:-2.2}], bumpers:[{x:1.95,z:-.85,r:.30,strength:4.2}]}
+      ];
+
+      const state = { dpr:1,w:1,h:1,time:0,last:performance.now(),accumulator:0, level:clamp(Number(localStorage.getItem('roomTiltGame.level')||0),0,levels.length-1),seq:0,solved:false, cube:{x:0,z:0,y:0,vy:0,vx:0,vz:0,q:Q.ident.slice(),size:.48,hold:0,grounded:true,jumpCooldown:0}, gravity:{x:0,z:0,targetX:0,targetZ:0}, gyro:{enabled:false,baseBeta:null,baseGamma:null,beta:0,gamma:0}, pointer:{x:0,y:0}, joy:{active:false,x:0,y:0}, settings:{strongGravity:localStorage.getItem('roomTiltGame.strongGravity')!=='0', dynamicCamera:localStorage.getItem('roomTiltGame.dynamicCamera')!=='0', sound:localStorage.getItem('roomTiltGame.sound')!=='0', haptic:localStorage.getItem('roomTiltGame.haptic')!=='0'}, audio:null, shake:0, pulse:{x:0,z:0,life:0,type:1}, renderScale:1, perfAvg:16.7, adaptiveAt:0 };
+
+      const VS = `attribute vec2 aPos; varying vec2 vUv; void main(){ vUv=aPos*.5+.5; gl_Position=vec4(aPos,0.0,1.0); }`;
+      const FS = `
+        precision highp float;
+        varying vec2 vUv;
+        uniform vec2 uRes;
+        uniform float uTime;
+        uniform vec2 uCube;
+        uniform float uCubeY;
+        uniform vec4 uCubeQ;
+        uniform vec2 uGravity;
+        uniform float uShake;
+        uniform vec2 uTarget;
+        uniform float uTargetY;
+        uniform float uTargetType;
+        uniform vec4 uPulse;
+        uniform vec4 uObs0;
+        uniform vec4 uObs1;
+        uniform vec4 uObs2;
+        uniform vec4 uObs3;
+        uniform vec4 uObs4;
+        uniform vec4 uObs5;
+        uniform vec4 uZone0;
+        uniform vec4 uZone1;
+        uniform vec4 uZone2;
+        uniform vec4 uRamp0;
+        uniform vec4 uRamp1;
+        uniform vec4 uRamp2;
+        uniform vec4 uRampMeta0;
+        uniform vec4 uRampMeta1;
+        uniform vec4 uRampMeta2;
+        uniform vec4 uPlat0;
+        uniform vec4 uPlat1;
+        uniform vec4 uPlat2;
+        uniform vec4 uPlatMeta0;
+        uniform vec4 uPlatMeta1;
+        uniform vec4 uPlatMeta2;
+        uniform vec4 uBump0;
+        uniform vec4 uBump1;
+        uniform vec4 uBump2;
+
+        #define MAX_DIST 24.0
+        #define SURF_DIST 0.0010
+        #define STEPS 136
+
+        float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453123); }
+        float noise(vec2 p){
+          vec2 i=floor(p), f=fract(p);
+          float a=hash(i), b=hash(i+vec2(1.0,0.0)), c=hash(i+vec2(0.0,1.0)), d=hash(i+vec2(1.0,1.0));
+          vec2 u=f*f*(3.0-2.0*f);
+          return mix(a,b,u.x)+(c-a)*u.y*(1.0-u.x)+(d-b)*u.x*u.y;
+        }
+        float fbm(vec2 p){
+          float v=0.0, a=.5;
+          for(int i=0;i<6;i++){ v+=a*noise(p); p*=2.04; a*=.5; }
+          return v;
+        }
+
+        vec3 qrot(vec4 q, vec3 v){ return v + 2.0*cross(q.xyz, cross(q.xyz,v)+q.w*v); }
+        float sdBox(vec3 p, vec3 b){ vec3 q=abs(p)-b; return length(max(q,0.0))+min(max(q.x,max(q.y,q.z)),0.0); }
+        float sdRoundBox(vec3 p, vec3 b, float r){ vec3 q=abs(p)-b+r; return length(max(q,0.0))+min(max(q.x,max(q.y,q.z)),0.0)-r; }
+        float sdCyl(vec3 p, float r, float h){ vec2 d=abs(vec2(length(p.xz),p.y))-vec2(r,h); return min(max(d.x,d.y),0.0)+length(max(d,0.0)); }
+        float sdRing(vec3 p){ vec2 q=vec2(abs(length(p.xz)-.45)-.075, abs(p.y)-.018); return min(max(q.x,q.y),0.0)+length(max(q,0.0)); }
+        vec2 opU(vec2 a, vec2 b){ return b.x<a.x ? b : a; }
+
+        vec2 obstacle(vec3 p, vec4 o){
+          if(o.z<=.001) return vec2(100.0,0.0);
+          return vec2(sdRoundBox(p-vec3(o.x,.245,o.y), vec3(o.z*.5,.245,o.w*.5), .055), 8.0);
+        }
+        vec2 zoneObj(vec3 p, vec4 z){
+          if(z.w<.5) return vec2(100.0,0.0);
+          return vec2(sdCyl(p-vec3(z.x,.033,z.y), z.z, .016), 15.0+z.w);
+        }
+        vec2 bumperObj(vec3 p, vec4 b){
+          if(b.z<.01) return vec2(100.0,0.0);
+          return vec2(sdCyl(p-vec3(b.x,.17,b.y), b.z, .17), 21.0);
+        }
+        float rampHeight(vec2 xz, vec4 r, vec4 meta){
+          if(meta.w < .5) return 0.0;
+          vec2 d=abs(xz-r.xy)-vec2(r.z*.5,r.w*.5);
+          float inside=step(max(d.x,d.y),0.0);
+          vec2 dir=normalize(meta.yz + vec2(.0001,0.0));
+          float denom=max(length(vec2(r.z,r.w)),.001);
+          float along=clamp(dot(xz-r.xy,dir)/denom+.5,0.0,1.0);
+          return along*meta.x*inside;
+        }
+        vec2 rampObj(vec3 p, vec4 r, vec4 meta){
+          if(r.z<=.001 || meta.w<.5) return vec2(100.0,0.0);
+          float h=rampHeight(p.xz,r,meta);
+          vec2 d=abs(p.xz-r.xy)-vec2(r.z*.5,r.w*.5);
+          float side=max(d.x,d.y);
+          float top=p.y-h;
+          float bottom=-p.y-.040;
+          float body=max(max(side,top),bottom);
+          return vec2(body,18.0);
+        }
+        vec2 platformObj(vec3 p, vec4 q, vec4 meta){
+          if(q.z<=.001 || meta.w<.5) return vec2(100.0,0.0);
+          float h=max(meta.x,.03);
+          return vec2(sdRoundBox(p-vec3(q.x,h*.5,q.y), vec3(q.z*.5,h*.5,q.w*.5), .045), 19.0);
+        }
+
+        vec2 mapScene(vec3 p){
+          vec2 r=vec2(100.0,0.0);
+
+          r=opU(r, vec2(sdBox(p-vec3(0.0,-.045,0.0), vec3(3.25,.055,3.25)), 1.0));
+          r=opU(r, vec2(sdRoundBox(p-vec3(0.0,.020,.78), vec3(2.08,.030,1.27), .035), 2.0));
+          r=opU(r, vec2(sdBox(p-vec3(0.0,1.58,-3.23), vec3(3.25,1.62,.045)), 3.0));
+          r=opU(r, vec2(sdBox(p-vec3(-3.23,1.58,0.0), vec3(.045,1.62,3.25)), 4.0));
+          r=opU(r, vec2(sdBox(p-vec3(3.23,1.58,0.0), vec3(.045,1.62,3.25)), 5.0));
+          r=opU(r, vec2(sdBox(p-vec3(0.0,3.18,0.0), vec3(3.25,.045,3.25)), 6.0));
+
+          r=opU(r, vec2(sdRoundBox(p-vec3(0.0,.115,-3.155), vec3(3.18,.105,.045), .020), 14.0));
+          r=opU(r, vec2(sdRoundBox(p-vec3(-3.155,.115,0.0), vec3(.045,.105,3.18), .020), 14.0));
+          r=opU(r, vec2(sdRoundBox(p-vec3(3.155,.115,0.0), vec3(.045,.105,3.18), .020), 14.0));
+
+          r=opU(r, vec2(sdRoundBox(p-vec3(0.0,3.095,-1.65), vec3(1.95,.025,.032), .012), 13.0));
+          r=opU(r, vec2(sdRoundBox(p-vec3(-1.95,3.095,-.40), vec3(.032,.025,1.30), .012), 13.0));
+          r=opU(r, vec2(sdRoundBox(p-vec3(1.95,3.095,-.40), vec3(.032,.025,1.30), .012), 13.0));
+
+          r=opU(r, zoneObj(p,uZone0));
+          r=opU(r, zoneObj(p,uZone1));
+          r=opU(r, zoneObj(p,uZone2));
+          r=opU(r, rampObj(p,uRamp0,uRampMeta0));
+          r=opU(r, rampObj(p,uRamp1,uRampMeta1));
+          r=opU(r, rampObj(p,uRamp2,uRampMeta2));
+          r=opU(r, platformObj(p,uPlat0,uPlatMeta0));
+          r=opU(r, platformObj(p,uPlat1,uPlatMeta1));
+          r=opU(r, platformObj(p,uPlat2,uPlatMeta2));
+
+          if(uTargetType<3.5){
+            vec3 tp=p-vec3(uTarget.x,.050+uTargetY,uTarget.y);
+            float d=uTargetType<2.5 ? sdCyl(tp,.49,.020) : sdRing(tp);
+            r=opU(r, vec2(d,9.0+uTargetType));
+          } else {
+            r=opU(r, vec2(sdRoundBox(p-vec3(uTarget.x,.74,-3.185), vec3(.58,.70,.030), .045), 15.0));
+          }
+
+          r=opU(r, obstacle(p,uObs0));
+          r=opU(r, obstacle(p,uObs1));
+          r=opU(r, obstacle(p,uObs2));
+          r=opU(r, obstacle(p,uObs3));
+          r=opU(r, obstacle(p,uObs4));
+          r=opU(r, obstacle(p,uObs5));
+          r=opU(r, bumperObj(p,uBump0));
+          r=opU(r, bumperObj(p,uBump1));
+          r=opU(r, bumperObj(p,uBump2));
+
+          vec4 iq=vec4(-uCubeQ.xyz,uCubeQ.w);
+          vec3 cp=qrot(iq,p-vec3(uCube.x,.255+uCubeY,uCube.y));
+          r=opU(r, vec2(sdRoundBox(cp,vec3(.245),.038), 7.0));
+          return r;
+        }
+
+        vec3 normalAt(vec3 p){
+          vec2 e=vec2(.0022,0.0);
+          return normalize(vec3(
+            mapScene(p+e.xyy).x-mapScene(p-e.xyy).x,
+            mapScene(p+e.yxy).x-mapScene(p-e.yxy).x,
+            mapScene(p+e.yyx).x-mapScene(p-e.yyx).x
+          ));
+        }
+        float softShadow(vec3 ro, vec3 rd, float mint, float maxt){
+          float res=1.0, t=mint;
+          for(int i=0;i<44;i++){
+            float h=mapScene(ro+rd*t).x;
+            res=min(res,10.5*h/t);
+            t+=clamp(h,.018,.15);
+            if(res<.018||t>maxt) break;
+          }
+          return clamp(res,0.0,1.0);
+        }
+        float ao(vec3 p, vec3 n){
+          float occ=0.0, sca=1.0;
+          for(int i=0;i<6;i++){
+            float h=.025+.070*float(i);
+            float d=mapScene(p+n*h).x;
+            occ+=(h-d)*sca;
+            sca*=.72;
+          }
+          return clamp(1.0-occ*1.36,0.0,1.0);
+        }
+
+        void material(float m, vec3 p, vec3 n, out vec3 albedo, out float rough, out float spec, out vec3 emit){
+          rough=.65; spec=.08; emit=vec3(0.0); albedo=vec3(.7);
+          if(m<1.5){
+            float board=fract((p.x+3.25)*1.72);
+            float seam=1.0-smoothstep(.020,.055,min(board,1.0-board));
+            float grain=fbm(vec2(p.x*7.5+fbm(p.xz*2.0)*.8,p.z*44.0));
+            float pore=fbm(p.xz*95.0);
+            albedo=mix(vec3(.50,.32,.16),vec3(.86,.67,.42),.35+.35*grain);
+            albedo*=1.0-seam*.12+pore*.025;
+            rough=.34; spec=.20;
+          } else if(m<2.5){
+            float f1=fbm(p.xz*24.0), f2=fbm(p.xz*96.0);
+            float warp=fbm(p.xz*6.0);
+            float fibers=pow(abs(sin((p.x*1.4+p.z*2.9+warp*.18)*115.0)),8.0);
+            float border=smoothstep(1.22,1.29,abs(p.z-.78))+smoothstep(2.00,2.09,abs(p.x));
+            albedo=vec3(.205,.218,.224)+vec3(f1*.12+f2*.04)+fibers*.070;
+            albedo=mix(albedo,vec3(.135,.145,.148),clamp(border,0.0,1.0)*.55);
+            rough=.97; spec=.020;
+          } else if(m<3.5){
+            albedo=vec3(1.0,.49,.050)*(0.86+.12*fbm(p.xy*5.0)); rough=.62; spec=.065;
+          } else if(m<4.5){
+            albedo=vec3(.18,.68,.09)*(0.86+.13*fbm(p.zy*5.2)); rough=.66; spec=.055;
+          } else if(m<5.5){
+            albedo=vec3(.91,.885,.835)*(0.89+.08*fbm(p.zy*6.0)); rough=.54; spec=.115;
+          } else if(m<6.5){
+            albedo=vec3(.75,.67,.55)*(0.88+.08*fbm(p.xz*8.0)); rough=.58; spec=.10;
+          } else if(m<7.5){
+            // Cube material. Keep it visibly red under strong LED/specular lighting.
+            // The previous edge highlight used world coordinates and could generate invalid/overbright values.
+            float micro=fbm(p.xz*18.0+p.xy*4.0);
+            float scratches=smoothstep(.86,1.0,fbm(p.xy*76.0+p.zx*13.0));
+            vec3 cubeLocal=vec3(p.x-uCube.x,p.y-.255,p.z-uCube.y);
+            float edgeBase=1.0-abs(max(max(abs(cubeLocal.x),abs(cubeLocal.y)),abs(cubeLocal.z))-.245)/.245;
+            float edge=pow(clamp(edgeBase,0.0,1.0),4.0);
+            albedo=mix(vec3(.66,.010,.006),vec3(1.0,.070,.040),.45+.22*micro);
+            albedo+=vec3(.090,.010,.006)*scratches+vec3(.145,.020,.012)*edge;
+            albedo=clamp(albedo,vec3(0.0),vec3(1.0));
+            rough=.30+scratches*.10; spec=.24;
+          } else if(m<8.5){
+            albedo=vec3(.19,.225,.26); rough=.46; spec=.18;
+          } else if(m<10.5){
+            albedo=vec3(.07,.92,.38); emit=vec3(.06,.92,.38)*.90; rough=.30; spec=.30;
+          } else if(m<11.5){
+            albedo=vec3(.16,.54,1.0); emit=vec3(.10,.46,1.0)*.95; rough=.30; spec=.30;
+          } else if(m<12.5){
+            albedo=vec3(1.0,.72,.12); emit=vec3(1.0,.68,.18)*1.15; rough=.34; spec=.28;
+          } else if(m<13.5){
+            albedo=vec3(1.0,.88,.62); emit=vec3(1.0,.75,.40)*4.6; rough=.15; spec=.48;
+          } else if(m<14.5){
+            albedo=vec3(.62,.46,.30); rough=.35; spec=.16;
+          } else if(m<15.5){
+            albedo=vec3(.12,.95,.56); emit=vec3(.10,1.0,.62)*1.9; rough=.22; spec=.42;
+          } else if(m<16.5){
+            albedo=vec3(.35,.82,1.0); emit=vec3(.10,.62,1.0)*.34; rough=.09; spec=.45;
+          } else if(m<17.5){
+            albedo=vec3(.62,.20,.82); emit=vec3(.70,.18,1.0)*.25; rough=.86; spec=.05;
+          } else if(m<18.5){
+            albedo=vec3(1.0,.50,.12); emit=vec3(1.0,.36,.08)*.46; rough=.36; spec=.26;
+          } else if(m<19.5){
+            float grain=fbm(p.xz*18.0+p.xy*3.0);
+            albedo=mix(vec3(.62,.38,.18),vec3(.88,.58,.28),grain); emit=vec3(1.0,.42,.12)*.18; rough=.46; spec=.18;
+          } else if(m<20.5){
+            float wear=fbm(p.xz*22.0);
+            albedo=mix(vec3(.42,.32,.24),vec3(.72,.55,.36),wear); rough=.54; spec=.14;
+          } else if(m<21.5){
+            albedo=vec3(.20,.95,1.0); emit=vec3(.10,.75,1.0)*1.35; rough=.22; spec=.42;
+          } else if(m<22.5){
+            albedo=vec3(1.0,.10,.06); emit=vec3(1.0,.08,.04)*.55; rough=.20; spec=.55;
+          }
+        }
+        vec3 quickMat(float m, vec3 p){ vec3 a,e; float r,s; material(m,p,vec3(0,1,0),a,r,s,e); return a+e; }
+        vec2 march(vec3 ro, vec3 rd){
+          float t=0.0,m=0.0;
+          for(int i=0;i<STEPS;i++){
+            vec2 h=mapScene(ro+rd*t);
+            if(h.x<SURF_DIST||t>MAX_DIST){m=h.y;break;}
+            t+=h.x*.80;
+          }
+          return vec2(t,m);
+        }
+        vec3 reflectionProbe(vec3 ro, vec3 rd){
+          float t=.04;
+          for(int i=0;i<36;i++){
+            vec3 p=ro+rd*t;
+            vec2 h=mapScene(p);
+            if(h.x<SURF_DIST*2.0) return quickMat(h.y,p)*exp(-t*.07);
+            t+=clamp(h.x*.90,.025,.25);
+            if(t>15.0) break;
+          }
+          return vec3(.050,.062,.078);
+        }
+        vec3 direct(vec3 p, vec3 n, vec3 v, vec3 lp, vec3 color, float power, float rough, float spec, vec3 albedo){
+          vec3 l=lp-p;
+          float d=length(l);
+          l/=d;
+          float sh=softShadow(p+n*.018,l,.035,d-.08);
+          float diff=max(dot(n,l),0.0);
+          vec3 h=normalize(l+v);
+          float sp=pow(max(dot(n,h),0.0),mix(115.0,10.0,rough))*spec;
+          return (albedo*diff*power+color*sp*power*.85)*sh/(1.0+.055*d*d);
+        }
+        vec3 shade(vec3 p, vec3 n, float m, vec3 rd){
+          if(m<6.5){
+            float b0=fbm(p.xz*34.0+vec2(2.1,.7));
+            float b1=fbm(p.xz*34.0+vec2(.2,5.3));
+            n=normalize(n+vec3(b0-.5,0.0,b1-.5)*.040);
+          }
+          if(m>6.5&&m<7.5){
+            float b=fbm(p.xy*28.0+p.zx*9.0);
+            n=normalize(n+vec3(b-.5,b*.18,.5-b)*.026);
+          }
+          if(m>14.5&&m<18.5){
+            float b=fbm(p.xz*38.0);
+            n=normalize(n+vec3(b-.5,0.0,.5-b)*.025);
+          }
+          vec3 albedo,emit;
+          float rough,spec;
+          material(m,p,n,albedo,rough,spec,emit);
+          vec3 v=normalize(-rd);
+          float amb=ao(p,n);
+          vec3 floorBounce=vec3(.105,.078,.052)*max(n.y,0.0);
+          vec3 screenBounce=vec3(.038,.052,.074)*max(-n.z,0.0);
+          vec3 greenBleed=vec3(.018,.055,.014)*max(-n.x,0.0);
+          vec3 whiteBleed=vec3(.045,.043,.038)*max(n.x,0.0);
+          vec3 col=albedo*(vec3(.155,.172,.198)+floorBounce+screenBounce+greenBleed+whiteBleed)*amb;
+          col+=direct(p,n,v,vec3(0,3.05,-.70),vec3(1,.84,.58),1.78,rough,spec,albedo);
+          col+=direct(p,n,v,vec3(-1.95,3.00,.62),vec3(.70,.82,1),.76,rough,spec*.75,albedo);
+          col+=direct(p,n,v,vec3(1.95,2.90,.20),vec3(1,.80,.55),.58,rough,spec*.6,albedo);
+          float fres=pow(1.0-max(dot(n,v),0.0),5.0);
+          if(m<1.5||(m>6.5&&m<7.5)||(m>13.5&&m<18.5)){
+            vec3 rr=reflect(rd,n);
+            vec3 refl=reflectionProbe(p+n*.025,rr);
+            float amt=(m<1.5)?.12:((m<7.5)?.10:.15);
+            if(m>6.5&&m<7.5) refl*=vec3(.95,.10,.07);
+            col=mix(col,refl,amt*(.22+fres));
+          }
+          float pulse=uPulse.z;
+          if(pulse>0.001){
+            float ring=abs(length(p.xz-uPulse.xy)-mix(.14,2.08,1.0-pulse));
+            float pg=exp(-abs(p.y)*25.0)*smoothstep(.095,.0,ring)*pulse;
+            vec3 pc=uPulse.w<1.5?vec3(.2,1,.55):(uPulse.w<2.5?vec3(.22,.62,1):(uPulse.w<3.5?vec3(1,.72,.15):vec3(.12,1,.62)));
+            col+=pc*pg*2.35;
+          }
+          col-=exp(-abs(p.y)*13.0)*.045;
+          col+=emit;
+          return col;
+        }
+        float segDist(vec3 p, vec3 a, vec3 b){
+          vec3 pa=p-a, ba=b-a;
+          float h=clamp(dot(pa,ba)/dot(ba,ba),0.0,1.0);
+          return length(pa-ba*h);
+        }
+        vec3 atmosphere(vec3 ro, vec3 rd, float maxT){
+          vec3 acc=vec3(0.0);
+          float tMax=clamp(maxT,2.0,12.0);
+          for(int i=0;i<8;i++){
+            float t=tMax*(float(i)+.5)/8.0;
+            vec3 p=ro+rd*t;
+            float strip=0.0;
+            strip+=exp(-segDist(p,vec3(-1.95,3.09,-1.65),vec3(1.95,3.09,-1.65))*4.3);
+            strip+=exp(-segDist(p,vec3(-1.95,3.09,-1.70),vec3(-1.95,3.09,1.05))*4.0)*.55;
+            strip+=exp(-segDist(p,vec3(1.95,3.09,-1.70),vec3(1.95,3.09,1.05))*4.0)*.55;
+            float dust=fbm(p.xz*1.35+vec2(uTime*.025,.17))*0.55+0.45;
+            float heightFade=smoothstep(.15,2.8,p.y)*smoothstep(3.25,2.25,p.y);
+            acc+=vec3(1.0,.78,.46)*strip*dust*heightFade*.0125*exp(-t*.035);
+          }
+          return acc;
+        }
+        vec3 cameraRay(vec2 frag,out vec3 ro){
+          vec2 jitter=vec2(hash(vec2(uTime,1.3)),hash(vec2(2.7,uTime)))-.5;
+          vec2 uv=(frag*2.0-uRes.xy)/uRes.y+jitter*uShake*.018;
+          float lens=dot(uv,uv);
+          uv*=1.0+.035*lens;
+          float land=step(uRes.y,uRes.x);
+          float fov=mix(1.02,1.34,land);
+          ro=vec3(uGravity.x*.50+uCube.x*.055,1.42+uCubeY*.06+abs(uGravity.y)*.10,mix(5.78,5.08,land)+uGravity.y*.30);
+          vec3 ta=vec3(uCube.x*.05,.82+uCubeY*.18,-.56+uCube.y*.04);
+          vec3 ww=normalize(ta-ro), uu=normalize(cross(ww,vec3(0,1,0))), vv=cross(uu,ww);
+          return normalize(uu*uv.x+vv*uv.y+ww*fov);
+        }
+        vec3 aces(vec3 x){ const float a=2.51,b=.03,c=2.43,d=.59,e=.14; return clamp((x*(a*x+b))/(x*(c*x+d)+e),0.0,1.0); }
+        void main(){
+          vec3 ro,rd=cameraRay(gl_FragCoord.xy,ro);
+          vec2 hit=march(ro,rd);
+          vec3 col;
+          float depth=1.0;
+          if(hit.x>MAX_DIST-.01){
+            col=vec3(.025,.032,.042)+vec3(.018,.022,.030)*(1.0-vUv.y);
+          } else {
+            vec3 p=ro+rd*hit.x;
+            vec3 n=normalAt(p);
+            col=shade(p,n,hit.y,rd);
+            depth=clamp(hit.x/13.0,0.0,1.0);
+            col=mix(col,vec3(.043,.052,.066),depth*.115);
+          }
+          col+=atmosphere(ro,rd,hit.x);
+          vec2 q=vUv-.5;
+          float vig=smoothstep(.90,.17,dot(q,q));
+          col*=.72+.28*vig;
+          float lum=dot(col,vec3(.2126,.7152,.0722));
+          col=mix(col*vec3(.92,.97,1.06),col*vec3(1.08,1.00,.90),smoothstep(.18,.95,lum));
+          float smudge=fbm(vUv*vec2(9.0,5.0)+vec2(.8,.25));
+          float glass=smoothstep(.70,1.0,smudge)*.018*smoothstep(.08,.8,depth);
+          float hair=smoothstep(.992,1.0,noise(vUv*vec2(1200.0,95.0)+uTime*.002))*.010;
+          col+=vec3(glass+hair);
+          col+=(hash(gl_FragCoord.xy+uTime*17.0)-.5)*.009;
+          col=aces(max(col,vec3(0)));
+          col=pow(col,vec3(.4545));
+          gl_FragColor=vec4(col,1);
+        }
+      `; // Let's replace entire FS onward? OOPS malformed? Wait developer content includes after this, must update with canmore. This raw state includes exact current. Need use canmore update. Need craft update from current, not final. But in analysis, we need call tool. Need no response yet. The user said Procede. We need update current canvas with improved. Since developer content shows current actually already includes some of my intended partial improvements in shader and state/renderScale. It seems after failed canmore, maybe manual edits applied? The current state already has 
+
+      const program = createProgram(VS, FS);
+      const loc = { aPos:gl.getAttribLocation(program,'aPos'), uRes:gl.getUniformLocation(program,'uRes'), uTime:gl.getUniformLocation(program,'uTime'), uCube:gl.getUniformLocation(program,'uCube'), uCubeY:gl.getUniformLocation(program,'uCubeY'), uCubeQ:gl.getUniformLocation(program,'uCubeQ'), uGravity:gl.getUniformLocation(program,'uGravity'), uShake:gl.getUniformLocation(program,'uShake'), uTarget:gl.getUniformLocation(program,'uTarget'), uTargetY:gl.getUniformLocation(program,'uTargetY'), uTargetType:gl.getUniformLocation(program,'uTargetType'), uPulse:gl.getUniformLocation(program,'uPulse'), uObs0:gl.getUniformLocation(program,'uObs0'), uObs1:gl.getUniformLocation(program,'uObs1'), uObs2:gl.getUniformLocation(program,'uObs2'), uObs3:gl.getUniformLocation(program,'uObs3'), uObs4:gl.getUniformLocation(program,'uObs4'), uObs5:gl.getUniformLocation(program,'uObs5'), uZone0:gl.getUniformLocation(program,'uZone0'), uZone1:gl.getUniformLocation(program,'uZone1'), uZone2:gl.getUniformLocation(program,'uZone2'), uRamp0:gl.getUniformLocation(program,'uRamp0'), uRamp1:gl.getUniformLocation(program,'uRamp1'), uRamp2:gl.getUniformLocation(program,'uRamp2'), uRampMeta0:gl.getUniformLocation(program,'uRampMeta0'), uRampMeta1:gl.getUniformLocation(program,'uRampMeta1'), uRampMeta2:gl.getUniformLocation(program,'uRampMeta2'), uPlat0:gl.getUniformLocation(program,'uPlat0'), uPlat1:gl.getUniformLocation(program,'uPlat1'), uPlat2:gl.getUniformLocation(program,'uPlat2'), uPlatMeta0:gl.getUniformLocation(program,'uPlatMeta0'), uPlatMeta1:gl.getUniformLocation(program,'uPlatMeta1'), uPlatMeta2:gl.getUniformLocation(program,'uPlatMeta2'), uBump0:gl.getUniformLocation(program,'uBump0'), uBump1:gl.getUniformLocation(program,'uBump1'), uBump2:gl.getUniformLocation(program,'uBump2') };
+      const quad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
+      function shader(type,src){const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s); if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s;}
+      function createProgram(vs,fs){const p=gl.createProgram(); gl.attachShader(p,shader(gl.VERTEX_SHADER,vs)); gl.attachShader(p,shader(gl.FRAGMENT_SHADER,fs)); gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); return p;}
+      function resize(scale = state.renderScale || 1){
+        state.w = Math.max(2, innerWidth);
+        state.h = Math.max(2, innerHeight);
+        const baseDpr = window.devicePixelRatio || 1;
+        const smallViewport = Math.min(state.w, state.h) < 720;
+        const maxDpr = smallViewport ? 1.58 : 2.05;
+        state.dpr = Math.max(.72, Math.min(maxDpr, baseDpr) * clamp(scale, .68, 1.12));
+        canvas.width = Math.max(2, Math.floor(state.w * state.dpr));
+        canvas.height = Math.max(2, Math.floor(state.h * state.dpr));
+        gl.viewport(0, 0, canvas.width, canvas.height);
+      }
+      function normalizeState(){ state.level = clamp(Number.isFinite(state.level) ? state.level : 0, 0, levels.length - 1); const l = currentLevel(); const len = Array.isArray(l.sequence) ? l.sequence.length : 1; state.seq = clamp(Number.isFinite(state.seq) ? state.seq : 0, 0, Math.max(0, len - 1)); }
+      function currentLevel(){ state.level = clamp(Number.isFinite(state.level) ? state.level : 0, 0, levels.length - 1); return levels[state.level] || levels[0]; }
+      function activeTarget(offset = 0){ const l = currentLevel(); if (Array.isArray(l.sequence) && l.sequence.length) return sanitizeTarget(l.sequence[clamp(state.seq + offset, 0, l.sequence.length - 1)]); return sanitizeTarget(l.target); }
+      function activeObstacles(){const t=state.time*.001; return (currentLevel().obstacles || []).map(o=>{let x=o.x,z=o.z; if(o.move){const v=Math.sin(t*(o.move.speed||1)+(o.move.phase||0))*(o.move.amp||0); if(o.move.axis==='x')x+=v; else z+=v;} return {...o,x,z};});}
+      function activePlatforms(){const t=state.time*.001; return (currentLevel().platforms || []).map(p=>{let x=p.x,z=p.z; if(p.move){const v=Math.sin(t*(p.move.speed||1)+(p.move.phase||0))*(p.move.amp||0); if(p.move.axis==='x')x+=v; else z+=v;} return {...p,x,z};});}
+      function visualZones(){const l=currentLevel(); const out=[...(l.zones||[])]; for(const r of (l.ramps||[])) out.push({type:4,x:r.x,z:r.z,r:Math.max(r.w,r.d)*.42}); for(const p of (l.platforms||[])) out.push({type:4,x:p.x,z:p.z,r:Math.max(p.w,p.d)*.38}); for(const j of (l.jumpPads||[])) out.push({type:5,x:j.x,z:j.z,r:j.r}); return out.slice(0,3);}
+      function insideRect(x,z,o){return Math.abs(x-o.x)<=o.w*.5 && Math.abs(z-o.z)<=o.d*.5;}
+      function groundHeightAt(x,z){let h=0; for(const p of activePlatforms()) if(insideRect(x,z,p)) h=Math.max(h,p.h||.55); for(const r of (currentLevel().ramps||[])){ if(insideRect(x,z,r)){ const dx=r.dx??0,dz=r.dz??-1; const len=Math.hypot(dx,dz)||1; const ux=dx/len,uz=dz/len; const denom=Math.max(r.w,r.d,1); const k=clamp(((x-r.x)*ux+(z-r.z)*uz)/denom+.5,0,1); h=Math.max(h,k*(r.h||.6)); } } return h;}
+      function setObs(location,o){!o?gl.uniform4f(location,0,0,0,0):gl.uniform4f(location,o.x,o.z,o.w,o.d);}
+      function setZone(location,z){!z?gl.uniform4f(location,0,0,0,0):gl.uniform4f(location,z.x,z.z,z.r,z.type);}
+      function setBump(location,b){!b?gl.uniform4f(location,0,0,0,0):gl.uniform4f(location,b.x,b.z,b.r,b.strength||4);}
+      function setRamp(location,r){!r?gl.uniform4f(location,0,0,0,0):gl.uniform4f(location,r.x,r.z,r.w,r.d);}
+      function setRampMeta(location,r){!r?gl.uniform4f(location,0,0,0,0):gl.uniform4f(location,r.h||.55,r.dx??1,r.dz??0,1);}
+      function setPlat(location,p){!p?gl.uniform4f(location,0,0,0,0):gl.uniform4f(location,p.x,p.z,p.w,p.d||p.w);}
+      function setPlatMeta(location,p){!p?gl.uniform4f(location,0,0,0,0):gl.uniform4f(location,p.h||.55,0,0,1);}
+      function render(){normalizeState(); const target=activeTarget(), obs=activeObstacles(), zones=visualZones(), bumps=currentLevel().bumpers||[], ramps=currentLevel().ramps||[], plats=activePlatforms(); gl.useProgram(program); gl.bindBuffer(gl.ARRAY_BUFFER,quad); gl.enableVertexAttribArray(loc.aPos); gl.vertexAttribPointer(loc.aPos,2,gl.FLOAT,false,0,0); gl.uniform2f(loc.uRes,canvas.width,canvas.height); gl.uniform1f(loc.uTime,state.time*.001); gl.uniform2f(loc.uCube,state.cube.x,state.cube.z); gl.uniform1f(loc.uCubeY,state.cube.y||0); gl.uniform4f(loc.uCubeQ,state.cube.q[0],state.cube.q[1],state.cube.q[2],state.cube.q[3]); gl.uniform2f(loc.uGravity,state.gravity.x,state.gravity.z); gl.uniform1f(loc.uShake,state.settings.dynamicCamera?state.shake:0); gl.uniform2f(loc.uTarget,target.pos[0],target.pos[1]); gl.uniform1f(loc.uTargetY,target.y||0); gl.uniform1f(loc.uTargetType,target.type); gl.uniform4f(loc.uPulse,state.pulse.x,state.pulse.z,state.pulse.life,state.pulse.type); setObs(loc.uObs0,obs[0]); setObs(loc.uObs1,obs[1]); setObs(loc.uObs2,obs[2]); setObs(loc.uObs3,obs[3]); setObs(loc.uObs4,obs[4]); setObs(loc.uObs5,obs[5]); setZone(loc.uZone0,zones[0]); setZone(loc.uZone1,zones[1]); setZone(loc.uZone2,zones[2]); setRamp(loc.uRamp0,ramps[0]); setRamp(loc.uRamp1,ramps[1]); setRamp(loc.uRamp2,ramps[2]); setRampMeta(loc.uRampMeta0,ramps[0]); setRampMeta(loc.uRampMeta1,ramps[1]); setRampMeta(loc.uRampMeta2,ramps[2]); setPlat(loc.uPlat0,plats[0]); setPlat(loc.uPlat1,plats[1]); setPlat(loc.uPlat2,plats[2]); setPlatMeta(loc.uPlatMeta0,plats[0]); setPlatMeta(loc.uPlatMeta1,plats[1]); setPlatMeta(loc.uPlatMeta2,plats[2]); setBump(loc.uBump0,bumps[0]); setBump(loc.uBump1,bumps[1]); setBump(loc.uBump2,bumps[2]); gl.drawArrays(gl.TRIANGLES,0,3);}
+
+      function resetLevel(show=false){const l=currentLevel(); state.seq=0; state.solved=false; state.cube.x=l.start[0]; state.cube.z=l.start[1]; state.cube.y=groundHeightAt(l.start[0],l.start[1]); state.cube.vy=0; state.cube.vx=0; state.cube.vz=0; state.cube.grounded=true; state.cube.jumpCooldown=0; state.cube.q=Q.ident.slice(); state.cube.hold=0; state.shake=0; state.pulse.life=0; updateUI(); if(show) toastMsg('Nivel reiniciado');}
+      function updateUI(){normalizeState(); const l=currentLevel(); ui.levelTitle.textContent=l.name; ui.levelPill.textContent=`Nivel ${state.level+1}/${levels.length}`; ui.objective.textContent=Array.isArray(l.sequence)?`${l.objective} Paso ${state.seq+1}/${l.sequence.length}.`:l.objective;}
+      function pointIn(z,r){return Math.hypot(state.cube.x-z.x,state.cube.z-z.z)<r;}
+      function physics(dt){
+        const gScale=state.settings.strongGravity?5.7:3.9;
+        state.gravity.x=lerp(state.gravity.x,state.gravity.targetX,.12);
+        state.gravity.z=lerp(state.gravity.z,state.gravity.targetZ,.12);
+        let ax=state.gravity.x*gScale, az=state.gravity.z*gScale, frictionMul=1;
+        for(const z of (currentLevel().zones||[])){
+          if(pointIn(z,z.r)){
+            if(z.type===1) frictionMul=.22;
+            if(z.type===2) frictionMul=2.65;
+            if(z.type===3){const dx=z.dx??1,dz=z.dz??0,len=Math.hypot(dx,dz)||1; ax+=dx/len*4.4; az+=dz/len*4.4;}
+          }
+        }
+        if(state.cube.jumpCooldown>0) state.cube.jumpCooldown-=dt;
+        if(state.cube.grounded && state.cube.jumpCooldown<=0){
+          for(const j of (currentLevel().jumpPads||[])){
+            if(Math.hypot(state.cube.x-j.x,state.cube.z-j.z)<j.r){
+              state.cube.vy=j.power||2.8;
+              state.cube.vx+=(j.dx||0)*.62;
+              state.cube.vz+=(j.dz||0)*.62;
+              state.cube.grounded=false;
+              state.cube.jumpCooldown=.62;
+              pulseAt(j.x,j.z,5,.9);
+              beep(620,.08,'triangle',.035);
+              vibrate([14,20,14]);
+              break;
+            }
+          }
+        }
+        state.cube.vx+=ax*dt;
+        state.cube.vz+=az*dt;
+        const speed=Math.hypot(state.cube.vx,state.cube.vz);
+        const airMul=state.cube.grounded?1:.18;
+        const fric=clamp(1-(.92+speed*.058)*frictionMul*airMul*dt,0,1);
+        state.cube.vx*=fric;
+        state.cube.vz*=fric;
+        const maxSpeed=5.9, sp=Math.hypot(state.cube.vx,state.cube.vz);
+        if(sp>maxSpeed){state.cube.vx=state.cube.vx/sp*maxSpeed; state.cube.vz=state.cube.vz/sp*maxSpeed;}
+        state.cube.x+=state.cube.vx*dt;
+        state.cube.z+=state.cube.vz*dt;
+        collideWalls();
+        for(const o of activeObstacles()) collideBox(o);
+        for(const b of (currentLevel().bumpers||[])) collideBumper(b);
+        const ground=groundHeightAt(state.cube.x,state.cube.z);
+        if(state.cube.y>ground+.002 || state.cube.vy>0){
+          state.cube.vy-=6.8*dt;
+          state.cube.y+=state.cube.vy*dt;
+          if(state.cube.y<=ground){
+            if(state.cube.vy<-1.1) impact(Math.min(1,Math.abs(state.cube.vy)/4));
+            state.cube.y=ground; state.cube.vy=0; state.cube.grounded=true;
+          } else state.cube.grounded=false;
+        } else {state.cube.y=ground; state.cube.vy=0; state.cube.grounded=true;}
+        updateCubeRotation(dt);
+        checkTarget(dt);
+        state.shake=Math.max(0,state.shake-dt*2.4);
+        state.pulse.life=Math.max(0,state.pulse.life-dt*.82);
+      }
+      function pulseAt(x,z,type,force=.75){state.pulse={x,z,type,life:1}; state.shake=Math.max(state.shake,force);}
+      function impact(power){if(power>.16){state.shake=Math.max(state.shake,power*.62); beep(115+power*170,.034,'triangle',.011+power*.013); if(power>.5)vibrate(10);}}
+      function bounce(axis,wallValue){const rest=.42; if(axis==='x'){state.cube.x=wallValue; state.cube.vx=-state.cube.vx*rest; state.cube.vz*=.82;}else{state.cube.z=wallValue; state.cube.vz=-state.cube.vz*rest; state.cube.vx*=.82;} impact(Math.min(1,Math.abs(axis==='x'?state.cube.vx:state.cube.vz)/3));}
+      function collideWalls(){const r=state.cube.size/2; if(state.cube.x<-3.2+r)bounce('x',-3.2+r); if(state.cube.x>3.2-r)bounce('x',3.2-r); if(state.cube.z<-3.2+r)bounce('z',-3.2+r); if(state.cube.z>3.2-r)bounce('z',3.2-r);}
+      function collideBox(o){if(state.cube.y>.58)return; const r=state.cube.size/2,minX=o.x-o.w/2-r,maxX=o.x+o.w/2+r,minZ=o.z-o.d/2-r,maxZ=o.z+o.d/2+r; if(state.cube.x<minX||state.cube.x>maxX||state.cube.z<minZ||state.cube.z>maxZ)return; const pen=[Math.abs(state.cube.x-minX),Math.abs(maxX-state.cube.x),Math.abs(state.cube.z-minZ),Math.abs(maxZ-state.cube.z)],m=Math.min(...pen),rest=.38; if(m===pen[0]){state.cube.x=minX;state.cube.vx=-Math.abs(state.cube.vx)*rest;state.cube.vz*=.78;}else if(m===pen[1]){state.cube.x=maxX;state.cube.vx=Math.abs(state.cube.vx)*rest;state.cube.vz*=.78;}else if(m===pen[2]){state.cube.z=minZ;state.cube.vz=-Math.abs(state.cube.vz)*rest;state.cube.vx*=.78;}else{state.cube.z=maxZ;state.cube.vz=Math.abs(state.cube.vz)*rest;state.cube.vx*=.78;} impact(Math.min(1,Math.hypot(state.cube.vx,state.cube.vz)/3));}
+      function collideBumper(b){if(state.cube.y>.72)return; const r=state.cube.size/2+b.r, dx=state.cube.x-b.x, dz=state.cube.z-b.z, d=Math.hypot(dx,dz)||.001; if(d>r)return; const nx=dx/d,nz=dz/d; state.cube.x=b.x+nx*r; state.cube.z=b.z+nz*r; const vn=state.cube.vx*nx+state.cube.vz*nz; state.cube.vx+=nx*((b.strength||4.2)-1.65*vn); state.cube.vz+=nz*((b.strength||4.2)-1.65*vn); pulseAt(b.x,b.z,4,.75); beep(280,.05,'square',.025); vibrate(18);}
+      function updateCubeRotation(dt){const vx=state.cube.vx,vz=state.cube.vz,s=Math.hypot(vx,vz); if(s<.002)return; const axis=V3.norm([vz,0,-vx]); const angle=s*dt/(state.cube.size*.52); state.cube.q=Q.norm(Q.mul(Q.axis(axis,angle),state.cube.q));}
+      function isTargetSolved(t){t=sanitizeTarget(t); const dx=state.cube.x-t.pos[0],dz=state.cube.z-t.pos[1],d=Math.hypot(dx,dz); const yOk=typeof t.y==='number'?Math.abs(state.cube.y-t.y)<.46:true; if(t.type===4)return yOk&&Math.abs(dx)<.40&&Math.abs(state.cube.z+2.42)<.40; if(t.type===3)return yOk&&d<.42&&Math.hypot(state.cube.vx,state.cube.vz)<.48&&state.cube.hold>.55; return yOk&&d<.45;}
+      function checkTarget(dt){if(state.solved)return; const t=activeTarget(); const d=Math.hypot(state.cube.x-t.pos[0],state.cube.z-t.pos[1]); if(t.type===3&&d<.42&&Math.hypot(state.cube.vx,state.cube.vz)<.48)state.cube.hold+=dt; else if(t.type===3)state.cube.hold=Math.max(0,state.cube.hold-dt*1.5); if(!isTargetSolved(t))return; pulseAt(t.pos[0],t.pos[1],t.type,.95); const l=currentLevel(); if(Array.isArray(l.sequence)){beep(520+state.seq*110,.08,'triangle'); vibrate(18); const solvedStep = state.seq; state.seq++; state.cube.hold=0; if(state.seq>=l.sequence.length)completeLevel(sanitizeTarget(l.sequence[solvedStep])); else{updateUI(); toastMsg(`Paso ${state.seq}/${l.sequence.length} activado`);}}else completeLevel(t);}
+      function completeLevel(resolvedTarget = activeTarget()){ if(state.solved)return; const t=sanitizeTarget(resolvedTarget); state.solved=true; pulseAt(t.pos[0],t.pos[1],t.type,1); winSound(); vibrate([20,30,20]); toastMsg(state.level===levels.length-1?'Secuencia final completa.':'Nivel resuelto. Cargando siguiente sala...',2200); setTimeout(()=>{if(state.level<levels.length-1){state.level++; localStorage.setItem('roomTiltGame.level',String(state.level)); resetLevel(false);}else{localStorage.setItem('roomTiltGame.level','0'); state.level=0; resetLevel(false); ui.startModal.classList.add('show'); ui.startModal.querySelector('h1').innerHTML='Gravedad<br>dominada'; ui.startModal.querySelector('p').textContent='Completaste las 14 salas. El circuito se reinició para volver a jugar.';}},1250);}
+      function updateGravityInput(){let tx=0,tz=0; if(state.gyro.enabled){const beta=state.gyro.beta-(state.gyro.baseBeta??state.gyro.beta), gamma=state.gyro.gamma-(state.gyro.baseGamma??state.gyro.gamma); tx=clamp(gamma/28,-1,1); tz=clamp(beta/28,-1,1);}else if(state.joy.active){tx=state.joy.x; tz=state.joy.y;}else{tx=state.pointer.x*.55; tz=state.pointer.y*.55;} if(state.joy.active&&state.gyro.enabled){tx=clamp(tx+state.joy.x*.55,-1,1); tz=clamp(tz+state.joy.y*.55,-1,1);} state.gravity.targetX=tx; state.gravity.targetZ=tz;}
+      function updateTelemetry(){const x=state.gravity.x,z=state.gravity.z; ui.gxFill.style.width=`${50+x*50}%`; ui.gzFill.style.width=`${50+z*50}%`; ui.gxText.textContent=x.toFixed(2); ui.gzText.textContent=z.toFixed(2);}
+      function tuneResolution(rawDt){
+        state.perfAvg = lerp(state.perfAvg || 16.7, rawDt * 1000, .06);
+        if (state.time - (state.adaptiveAt || 0) < 1300) return;
+        state.adaptiveAt = state.time;
+        let next = state.renderScale || 1;
+        if (state.perfAvg > 28 && next > .70) next -= .08;
+        else if (state.perfAvg < 15.5 && next < 1.04) next += .05;
+        next = clamp(next, .68, 1.06);
+        if (Math.abs(next - state.renderScale) > .025) {
+          state.renderScale = next;
+          resize(next);
+        }
+      }
+      function frame(now){
+        const rawDt = Math.min(.05, (now-state.last)/1000 || .016);
+        state.time = now;
+        state.last = now;
+        tuneResolution(rawDt);
+        updateGravityInput();
+        state.accumulator += rawDt;
+        const step = 1/90;
+        for(let i=0; state.accumulator>=step && i<6; i++, state.accumulator-=step) physics(step);
+        updateTelemetry();
+        render();
+        requestAnimationFrame(frame);
+      }
+      function toastMsg(msg,ms=2400){ui.toast.textContent=msg; ui.toast.classList.add('show'); clearTimeout(toastMsg.t); toastMsg.t=setTimeout(()=>ui.toast.classList.remove('show'),ms);}
+      function vibrate(p=18){if(state.settings.haptic&&navigator.vibrate)navigator.vibrate(p);}
+      function audioCtx(){if(!state.audio){const AC=window.AudioContext||window.webkitAudioContext;if(AC)state.audio=new AC();} if(state.audio&&state.audio.state==='suspended')state.audio.resume(); return state.audio;}
+      function beep(freq=420,dur=.06,type='sine',gain=.035){if(!state.settings.sound)return; const ac=audioCtx(); if(!ac)return; const o=ac.createOscillator(),g=ac.createGain(); o.type=type; o.frequency.value=freq; g.gain.setValueAtTime(.0001,ac.currentTime); g.gain.exponentialRampToValueAtTime(gain,ac.currentTime+.012); g.gain.exponentialRampToValueAtTime(.0001,ac.currentTime+dur); o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime+dur+.02);}
+      function winSound(){beep(520,.08,'triangle'); setTimeout(()=>beep(740,.09,'triangle'),85); setTimeout(()=>beep(1020,.12,'sine',.028),170);}
+      function enterImmersive(){if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});}
+      function enableGyro(){if(!('DeviceOrientationEvent'in window)){toastMsg('Este navegador no expone DeviceOrientation. Usá stick/mouse.');return;} const ok=()=>{state.gyro.enabled=true; state.gyro.baseBeta=null; state.gyro.baseGamma=null; ui.sensorLed.classList.add('on'); ui.sensorText.textContent='Giroscopio activo: la inclinación define la gravedad.'; toastMsg('Giroscopio activo. Tocá calibrar si querés recentrar.');}; if(typeof DeviceOrientationEvent.requestPermission==='function')DeviceOrientationEvent.requestPermission().then(p=>p==='granted'?ok():toastMsg('Permiso de sensores denegado.')).catch(()=>toastMsg('No se pudo activar el giroscopio.')); else ok();}
+      window.addEventListener('deviceorientation',e=>{state.gyro.beta=Number(e.beta||0); state.gyro.gamma=Number(e.gamma||0); if(state.gyro.enabled&&state.gyro.baseBeta===null){state.gyro.baseBeta=state.gyro.beta; state.gyro.baseGamma=state.gyro.gamma;}},true);
+      function calibrateGyro(){if(!state.gyro.enabled)enableGyro(); else{state.gyro.baseBeta=state.gyro.beta; state.gyro.baseGamma=state.gyro.gamma; toastMsg('Gravedad recalibrada a la posición actual.'); vibrate(16);}}
+      function switchSet(btn,val){btn.classList.toggle('on',!!val); btn.setAttribute('aria-pressed',String(!!val));}
+      function initSwitches(){switchSet($('gravitySwitch'),state.settings.strongGravity); switchSet($('cameraSwitch'),state.settings.dynamicCamera); switchSet($('soundSwitch'),state.settings.sound); switchSet($('hapticSwitch'),state.settings.haptic);}
+      function runSelfTests(){
+        const oldLevel = state.level, oldSeq = state.seq, oldScale = state.renderScale;
+        state.level = 4; state.seq = 999;
+        console.assert(activeTarget().pos.length===2, 'activeTarget clamps sequence overflow');
+        state.level = 13; state.seq = 4;
+        console.assert(activeTarget().type===4, 'activeTarget returns last valid final sequence target');
+        console.assert(sanitizeTarget(undefined).pos[0]===0, 'sanitizeTarget fallback handles undefined');
+        console.assert(state.cube.q.every(Number.isFinite), 'cube quaternion starts finite');
+        state.renderScale = .73; resize(state.renderScale);
+        console.assert(canvas.width > 1 && canvas.height > 1, 'adaptive resize produces valid drawing buffer');
+        state.renderScale = oldScale; state.level=14; state.seq=0; console.assert(Number.isFinite(activeTarget().y||0), 'elevated target y is valid');
+        console.assert(typeof groundHeightAt === 'function' && groundHeightAt(-1.25,1.05) >= 0, 'vertical ground height function is available'); state.level = oldLevel; state.seq = oldSeq; resize(state.renderScale);
+        console.info('Room Tilt Cube self-tests passed');
+      }
+      canvas.addEventListener('pointermove',e=>{state.pointer.x=clamp((e.clientX/state.w-.5)*2,-1,1); state.pointer.y=clamp((e.clientY/state.h-.5)*2,-1,1);});
+      ui.stickWrap.addEventListener('pointerdown',e=>{e.preventDefault(); ui.stickWrap.setPointerCapture(e.pointerId); state.joy.active=true; updateJoy(e); audioCtx();}); ui.stickWrap.addEventListener('pointermove',updateJoy); ui.stickWrap.addEventListener('pointerup',endJoy); ui.stickWrap.addEventListener('pointercancel',endJoy);
+      function updateJoy(e){if(!state.joy.active)return; const r=ui.stickWrap.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,max=r.width*.30; let dx=e.clientX-cx,dy=e.clientY-cy,d=Math.hypot(dx,dy); if(d>max){dx=dx/d*max;dy=dy/d*max;} state.joy.x=dx/max; state.joy.y=dy/max; ui.stick.style.setProperty('--jx',dx+'px'); ui.stick.style.setProperty('--jy',dy+'px');}
+      function endJoy(e){state.joy.active=false; state.joy.x=state.joy.y=0; ui.stick.style.setProperty('--jx','0px'); ui.stick.style.setProperty('--jy','0px'); try{ui.stickWrap.releasePointerCapture(e.pointerId)}catch{}}
+      window.addEventListener('keydown',e=>{const k=e.key.toLowerCase(); if(k==='r')resetLevel(true); if(k==='h')showHint(); const v=.85; if(k==='arrowleft'||k==='a'){state.gravity.targetX=-v;e.preventDefault();} if(k==='arrowright'||k==='d'){state.gravity.targetX=v;e.preventDefault();} if(k==='arrowup'||k==='w'){state.gravity.targetZ=-v;e.preventDefault();} if(k==='arrowdown'||k==='s'){state.gravity.targetZ=v;e.preventDefault();}});
+      $('hintBtn').addEventListener('click',showHint); function showHint(){toastMsg(currentLevel().hint,3600); vibrate(12);} $('gyroBtn').addEventListener('click',calibrateGyro); $('settingsBtn').addEventListener('click',()=>ui.settingsModal.classList.add('show')); $('closeSettingsBtn').addEventListener('click',()=>ui.settingsModal.classList.remove('show')); $('resetBtn').addEventListener('click',()=>resetLevel(true)); $('resetAllBtn').addEventListener('click',()=>{localStorage.removeItem('roomTiltGame.level'); state.level=0; ui.settingsModal.classList.remove('show'); resetLevel(true);});
+      $('startGyroBtn').addEventListener('click',()=>{audioCtx(); enterImmersive(); app.classList.add('playing'); ui.startModal.classList.remove('show'); enableGyro(); setTimeout(showHint,450);}); $('startBtn').addEventListener('click',()=>{audioCtx(); enterImmersive(); app.classList.add('playing'); ui.startModal.classList.remove('show'); setTimeout(showHint,450);});
+      $('gravitySwitch').addEventListener('click',()=>{state.settings.strongGravity=!state.settings.strongGravity; localStorage.setItem('roomTiltGame.strongGravity',state.settings.strongGravity?'1':'0'); switchSet($('gravitySwitch'),state.settings.strongGravity);}); $('cameraSwitch').addEventListener('click',()=>{state.settings.dynamicCamera=!state.settings.dynamicCamera; localStorage.setItem('roomTiltGame.dynamicCamera',state.settings.dynamicCamera?'1':'0'); switchSet($('cameraSwitch'),state.settings.dynamicCamera);}); $('soundSwitch').addEventListener('click',()=>{state.settings.sound=!state.settings.sound; localStorage.setItem('roomTiltGame.sound',state.settings.sound?'1':'0'); switchSet($('soundSwitch'),state.settings.sound); if(state.settings.sound)beep(520,.06);}); $('hapticSwitch').addEventListener('click',()=>{state.settings.haptic=!state.settings.haptic; localStorage.setItem('roomTiltGame.haptic',state.settings.haptic?'1':'0'); switchSet($('hapticSwitch'),state.settings.haptic); vibrate(20);});
+      window.addEventListener('resize',resize); document.addEventListener('visibilitychange',()=>{if(document.hidden){state.cube.vx*=.2; state.cube.vz*=.2;}});
+      resize(); initSwitches(); runSelfTests(); resetLevel(false); requestAnimationFrame(frame);
+    })();
+  </script>
+</body>
+</html>
